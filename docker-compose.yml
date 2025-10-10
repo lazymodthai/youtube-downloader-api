@@ -1,0 +1,15 @@
+services:
+  # ตั้งชื่อ Service ของเรา (เช่น backend-downloader)
+  backend-downloader:
+    # Build Image จาก Dockerfile ใน Directory ปัจจุบัน (.)
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # ตั้งชื่อให้กับ Container ที่จะถูกสร้างขึ้น
+    container_name: youtube-downloader-backend
+    # การเชื่อมต่อ Port (Port ของเครื่อง Host : Port ภายใน Container)
+    # ทำให้เราสามารถเข้าถึงแอปใน Container ผ่าน http://localhost:4000 จากเครื่องของเราได้
+    ports:
+      - "4000:4000"
+    # กำหนดให้ Container เริ่มทำงานใหม่โดยอัตโนมัติหากเกิดข้อผิดพลาด
+    restart: unless-stopped
