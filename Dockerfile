@@ -1,15 +1,19 @@
-FROM node:20-alpine
+FROM python:3.11-slim
 
-# เปิด repo edge เพื่อให้มี ffmpeg
-RUN echo "https://dl-cdn.alpinelinux.org/alpine/edge/community" >> /etc/apk/repositories \
-  && echo "https://dl-cdn.alpinelinux.org/alpine/edge/main" >> /etc/apk/repositories \
-  && apk update \
-  && apk add --no-cache python3 py3-pip ffmpeg curl bash \
-  && pip install --no-cache-dir --break-system-packages --upgrade yt-dlp
+# ติดตั้ง Node.js และ dependencies พื้นฐาน
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ffmpeg \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# ติดตั้ง Python packages
+RUN pip install --no-cache-dir yt-dlp openai-whisper
 
 # Auto-update yt-dlp เมื่อ container เริ่มทำงาน
-RUN echo '#!/bin/sh' > /app-entrypoint.sh \
-  && echo 'pip install --no-cache-dir --break-system-packages --upgrade yt-dlp 2>/dev/null || true' >> /app-entrypoint.sh \
+RUN echo '#!/bin/bash' > /app-entrypoint.sh \
+  && echo 'pip install --no-cache-dir --upgrade yt-dlp 2>/dev/null || true' >> /app-entrypoint.sh \
   && echo 'exec "$@"' >> /app-entrypoint.sh \
   && chmod +x /app-entrypoint.sh
 

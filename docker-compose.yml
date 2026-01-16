@@ -6,9 +6,40 @@ services:
     container_name: youtube-downloader-backend
     ports:
       - "4000:4000"
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://youtube:youtube123@postgres:5432/youtube_db
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - myapp-network
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: youtube-downloader-db
+    ports:
+      - "4001:5432"
+    environment:
+      POSTGRES_USER: youtube
+      POSTGRES_PASSWORD: youtube123
+      POSTGRES_DB: youtube_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U youtube -d youtube_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - myapp-network
+
+volumes:
+  postgres_data:
 
 networks:
   myapp-network:
