@@ -84,15 +84,28 @@ async function saveSummaryResult(logId, data) {
   if (!pool) return;
   try {
     await pool.query(
-      `INSERT INTO summary_results (usage_log_id, video_url, video_title, summary, key_points, transcript_length)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
+      `INSERT INTO summary_results (
+        usage_log_id, 
+        video_url, 
+        video_title, 
+        conclusion, 
+        market_highlights, 
+        papers, 
+        transcript_length,
+        transcript_source,
+        raw_result
+      )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
       [
         logId,
         data.videoUrl,
         data.videoTitle,
-        data.summary,
-        JSON.stringify(data.keyPoints),
+        data.conclusion,
+        JSON.stringify(data.marketHighlights || []),
+        JSON.stringify(data.papers || []),
         data.transcriptLength,
+        data.transcriptSource,
+        JSON.stringify(data.rawResult || {}),
       ]
     );
   } catch (error) {
@@ -922,49 +935,51 @@ app.post("/summarize", async (req, res) => {
 
     // 4. ส่งให้ Gemini สรุป
     console.log("[Summarize] Generating summary with Gemini...");
-    const prompt = `คุณคือผู้เชี่ยวชาญด้านการวิเคราะห์การลงทุนและสรุปเนื้อหา กรุณาสรุปเนื้อหาวิดีโอนี้ให้เป็นใจความสำคัญที่น่าสนใจและน่าติดตาม
+    const prompt = `คุณคืออัจฉริยะด้านการวิเคราะห์การลงทุนและเศรษฐศาสตร์ หน้าที่ของคุณคือสรุปเนื้อหาจากวิดีโอนี้ให้ "ละเอียดครบถ้วนที่สุด" และ "ทรงพลัง" เหมือนตัวอย่างที่กำหนด
 
 ชื่อวิดีโอ: ${title}
 
 เนื้อหา (transcript):
-${transcript.substring(0, 30000)}
+${transcript.substring(0, 1000000)}
 
-กรุณาสรุปในรูปแบบดังนี้:
+กฎเหล็กในการสรุป:
+1. **ห้ามสรุปแบบย่อเกินไป**: ให้ดึงข้อมูลมาให้ครบทุกประเด็นที่วิทยากรพูด
+2. **ความยาวและรายละเอียด**: แต่ละหัวข้อต้องมีความยาวและข้อมูลที่เพียงพอ เห็นภาพชัดเจน ไม่ใช่แค่สรุปสั้นๆ 1 ประโยค
+3. **เจาะลึกเนื้อหา**: หากมีการพูดถึงสถิติ ตัวเลข ชื่อหุ้น ชื่อกลุ่มอุตสาหกรรม หรือมุมมองเฉพาะตัวของนักลงทุน (เช่น Buffett, Trump) ให้ใส่มาให้หมด
 
-1. **สถานการณ์ตลาดและภาพรวมที่น่าสนใจ (marketHighlights)**: 
-   - รวบรวมประเด็นสำคัญเกี่ยวกับสถานการณ์ตลาด การหมุนเวียนเงินทุน ผลประกอบการ มุมมองนักลงทุนชื่อดัง ฯลฯ
-   - แต่ละประเด็นให้มี title และ description ที่ละเอียด
+โครงสร้างที่ต้องทำ:
 
-2. **เจาะลึกเนื้อหาจาก Paper/Research (papers)**:
-   - ถ้ามีการกล่าวถึง Paper, Research Report หรือบทวิเคราะห์ ให้แยกออกมา
-   - แต่ละ Paper ให้มี: source (แหล่งที่มา/ชื่อสถาบัน), title (หัวข้อหลัก), และ keyFindings (array ของประเด็นสำคัญที่ค้นพบ)
+1. **สถานการณ์ตลาดและภาพรวมที่น่าสนใจ (marketHighlights)**:
+   - ดึงทุกประเด็นเด่นที่พูดถึง เช่น Sector Rotation, นิยามตลาดหมี vs การปรับฐาน, ความเคลื่อนไหวรายประเทศ (ญี่ปุ่น, ไทย, สหรัฐฯ), ผลประกอบการกลุ่มธนาคาร ฯลฯ
+   - แต่ละประเด็นต้องมี "title" ที่สื่อสารชัดเจน และ "description" ที่อธิบายเนื้อหาอย่างละเอียดและน่าติดตาม
+
+2. **เจาะลึกเนื้อหาจาก Paper / Research Reports (papers)**:
+   - สกัดเนื้อหาจากทุก Paper ที่มีการอ้างอิงในคลิป แยกสรุปตามเจ้าของ Paper (เช่น BlackRock, Robeco, Franklin Templeton ฯลฯ)
+   - แต่ละ Paper ต้องประกอบด้วย:
+     - "source": ชื่อสถาบัน/เจ้าของ Paper
+     - "title": หัวข้อหลักของ Paper นั้นๆ
+     - "keyFindings": รายการประเด็นสำคัญทั้งหมดที่อยู่ใน Paper นั้น (ต้องมีหลายประเด็นตามที่พูดในคลิป)
+     - แต่ละ Finding ต้องมี "title" และ "description" ที่ลงรายละเอียดเจาะลึก
 
 3. **บทสรุป (conclusion)**:
-   - สรุปภาพรวมแบบ paragraph ที่กระชับแต่ครอบคลุม
-   - รวมถึงกลยุทธ์หรือคำแนะนำสำหรับนักลงทุน (ถ้ามี)
+   - เขียนสรุปภาพรวมและสไตล์การลงทุนที่เหมาะสมกับสถานการณ์นี้ในรูปแบบ 1-2 ย่อหน้า โดยเน้นกลยุทธ์ที่นักลงทุนควรนำไปใช้จริง
 
-กรุณาตอบในรูปแบบ JSON:
+รูปแบบ JSON ที่ต้องตอบ (ห้ามมี markdown code block):
 {
   "marketHighlights": [
-    {
-      "title": "หัวข้อประเด็น (เช่น การหมุนเวียนกลุ่มอุตสาหกรรม)",
-      "description": "รายละเอียดของประเด็นแบบครบถ้วน"
-    }
+    { "title": "ชื่อหัวข้อประเด็น", "description": "รายละเอียดแบบเจาะลึกและน่าติดตาม" }
   ],
   "papers": [
     {
-      "source": "ชื่อสถาบัน/แหล่งที่มา (เช่น BlackRock, Robeco)",
+      "source": "ชื่อสถาบัน",
       "title": "หัวข้อหลักของ Paper",
-      "keyFindings": ["ประเด็นสำคัญที่ 1", "ประเด็นสำคัญที่ 2"]
+      "keyFindings": [
+        { "title": "ใจความแม่บท", "description": "รายละเอียดข้อมูลแบบจัดเต็ม" }
+      ]
     }
   ],
-  "conclusion": "บทสรุปภาพรวมแบบ paragraph พร้อมกลยุทธ์/คำแนะนำ"
-}
-
-หมายเหตุ: 
-- ถ้าไม่มี Paper/Research ให้ใส่ papers เป็น []
-- ถ้าไม่ใช่เนื้อหาเกี่ยวกับการลงทุน ให้ปรับรูปแบบให้เหมาะสมกับเนื้อหา
-- ตอบเป็น JSON เท่านั้น ไม่ต้องมี markdown code block`;
+  "conclusion": "สรุปภาพรวมและกลยุทธ์การลงทุนแบบมืออาชีพ"
+}`;
 
     const response = await genai.models.generateContent({
       model: "gemini-2.0-flash",
@@ -1004,9 +1019,12 @@ ${transcript.substring(0, 30000)}
     await saveSummaryResult(logId, {
       videoUrl: videoLink,
       videoTitle: title,
-      summary: summaryData.conclusion || "",
-      keyPoints: summaryData.marketHighlights?.map((h) => h.title) || [],
+      conclusion: summaryData.conclusion,
+      marketHighlights: summaryData.marketHighlights,
+      papers: summaryData.papers,
       transcriptLength: transcript.length,
+      transcriptSource: transcriptSource,
+      rawResult: summaryData,
     });
 
     res.json({
@@ -1258,14 +1276,14 @@ app.get("/summaries", async (req, res) => {
     let paramIndex = 1;
 
     if (search) {
-      whereClause = ` WHERE video_title ILIKE $${paramIndex}`;
+      whereClause = ` WHERE s.video_title ILIKE $${paramIndex} OR s.video_url ILIKE $${paramIndex}`;
       params.push(`%${search}%`);
       paramIndex++;
     }
 
     // Get total count
     const countResult = await pool.query(
-      `SELECT COUNT(*) as total FROM summary_results${whereClause}`,
+      `SELECT COUNT(*) as total FROM summary_results s${whereClause}`,
       params
     );
 
@@ -1275,15 +1293,16 @@ app.get("/summaries", async (req, res) => {
         s.id,
         s.video_url,
         s.video_title,
-        s.summary,
-        s.key_points,
+        s.conclusion,
+        s.market_highlights,
+        s.papers,
         s.transcript_length,
+        s.transcript_source,
         s.created_at,
         u.video_author,
-        u.video_duration,
-        u.processing_time_ms
+        u.video_duration
        FROM summary_results s
-       LEFT JOIN usage_logs u ON s.usage_log_id = u.id
+       JOIN usage_logs u ON s.usage_log_id = u.id
        ${whereClause}
        ORDER BY s.created_at DESC 
        LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`,

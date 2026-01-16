@@ -27,10 +27,14 @@ CREATE TABLE IF NOT EXISTS summary_results (
     usage_log_id INTEGER REFERENCES usage_logs(id),
     video_url TEXT NOT NULL,
     video_title TEXT,
-    summary TEXT,
-    key_points JSONB,
+    conclusion TEXT,
+    market_highlights JSONB,
+    papers JSONB,
     transcript_length INTEGER,
+    transcript_source VARCHAR(20),
+    raw_result JSONB,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_summary_results_video_url ON summary_results(video_url);
+CREATE INDEX idx_summary_results_created_at ON summary_results(created_at);
