@@ -5,7 +5,15 @@ RUN echo "https://dl-cdn.alpinelinux.org/alpine/edge/community" >> /etc/apk/repo
   && echo "https://dl-cdn.alpinelinux.org/alpine/edge/main" >> /etc/apk/repositories \
   && apk update \
   && apk add --no-cache python3 py3-pip ffmpeg curl bash \
-  && pip install --no-cache-dir --break-system-packages yt-dlp
+  && pip install --no-cache-dir --break-system-packages --upgrade yt-dlp
+
+# Auto-update yt-dlp เมื่อ container เริ่มทำงาน
+RUN echo '#!/bin/sh' > /app-entrypoint.sh \
+  && echo 'pip install --no-cache-dir --break-system-packages --upgrade yt-dlp 2>/dev/null || true' >> /app-entrypoint.sh \
+  && echo 'exec "$@"' >> /app-entrypoint.sh \
+  && chmod +x /app-entrypoint.sh
+
+ENTRYPOINT ["/app-entrypoint.sh"]
 
 WORKDIR /app
 COPY package*.json ./
